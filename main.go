@@ -5,8 +5,27 @@ import (
 	"net/http"
 	"time"
 
+	_ "study_tracker/docs" // replace with your actual module name
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
+
+// @title           LeetCode Questions API
+// @version         1.0
+// @description     API for managing LeetCode questions and users
+// @host            localhost:8080
+// @BasePath        /api/v1
+
+// Define response models for Swagger
+type Response struct {
+	Message string `json:"message"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
 
 type User struct {
 	ID   string `json:"id"`
@@ -38,6 +57,9 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
+	// Swagger docs
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Routes
 	v1 := router.Group("/api/v1")
 	{
@@ -50,6 +72,12 @@ func main() {
 	router.Run()
 }
 
+// @Summary     Get users
+// @Description Get list of users
+// @Tags        users
+// @Produce     json
+// @Success     200 {object} map[string][]User "User list response"
+// @Router      /users [get]
 func getUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"users": []User{
@@ -58,6 +86,15 @@ func getUsers(c *gin.Context) {
 	})
 }
 
+// @Summary     Create user
+// @Description Create a new user
+// @Tags        users
+// @Accept      json
+// @Produce     json
+// @Param       user body User true "User object"
+// @Success     201 {object} User "User created"
+// @Failure     400 {object} ErrorResponse "Bad request"
+// @Router      /users [post]
 func createUser(c *gin.Context) {
 	var newUser User
 	if err := c.BindJSON(&newUser); err != nil {

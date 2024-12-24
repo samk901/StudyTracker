@@ -1,0 +1,64 @@
+basePath: /api/v1
+definitions:
+  main.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  main.User:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for managing LeetCode questions and users
+  title: LeetCode Questions API
+  version: "1.0"
+paths:
+  /users:
+    get:
+      description: Get list of users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User list response
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/main.User'
+              type: array
+            type: object
+      summary: Get users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user
+      parameters:
+      - description: User object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/main.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created
+          schema:
+            $ref: '#/definitions/main.User'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Create user
+      tags:
+      - users
+swagger: "2.0"
