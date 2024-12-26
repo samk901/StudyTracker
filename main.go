@@ -1,17 +1,55 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	_ "study_tracker/docs" // replace with your actual module name
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+var db *sql.DB
+
+func initDB() (*sql.DB, error) {
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Error loading .env file")
+		return nil, err
+	}
+
+	// Get environment variables
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := os.Getenv("DB_NAME")
+
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+
+	db, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = db.Ping(); err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Successfully connected to database!")
+	return db, nil
+}
+
+// Database configs
 // @title           LeetCode Questions API
 // @version         1.0
 // @description     API for managing LeetCode questions and users
@@ -50,7 +88,36 @@ type LeetCodeQuestions struct {
 	Notes             string     `json:"notes"`
 }
 
+// Database queries
+const (
+	createUserQuery = `
+		INSERT INTO Users (name) 
+		VALUES ($1) 
+		RETURNING id`
+
+	getUsersQuery = `
+		SELECT id, name 
+		FROM Users`
+
+	createQuestionQuery = `
+		INSERT INTO Questions (name, pattern, difficulty, last_completed_time, next_due_time, notes) 
+		VALUES ($1, $2, $3, $4, $5, $6) 
+		RETURNING id`
+
+	getQuestionsQuery = `
+		SELECT id, name, pattern, difficulty, last_completed_time, next_due_time, notes 
+		FROM Questions`
+)
+
 func main() {
+
+	var err error
+	db, err = initDB()
+	if err != nil {
+		fmt.Println("Failed to connect to database:", err)
+		return
+	}
+
 	router := gin.Default()
 
 	// Middleware
@@ -79,11 +146,28 @@ func main() {
 // @Success     200 {object} map[string][]User "User list response"
 // @Router      /users [get]
 func getUsers(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"users": []User{
-			{ID: "1", Name: "John"},
-		},
-	})
+	rows, err := db.Query(getUsersQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Name); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
 // @Summary     Create user
@@ -102,20 +186,55 @@ func createUser(c *gin.Context) {
 		return
 	}
 
-	// Add User logic here
-	fmt.Println("Hello World!")
+	err := db.QueryRow(createUserQuery, newUser.Name).Scan(&newUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusCreated, newUser)
 }
 
+// @Summary     Get questions
+// @Description Get list of questions
+// @Tags        questions
+// @Produce     json
+// @Success     200 {object} map[string][]LeetCodeQuestions "Questions list response"
+// @Router      /questions [get]
 func getQuestions(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"questions": []LeetCodeQuestions{
-			{ID: "1", Name: "Two Sum", Pattern: "Array", Difficulty: Easy, LastCompletedTime: time.Now(), NextDueTime: time.Now(), Notes: "Notes"},
-		},
-	})
+	rows, err := db.Query(getQuestionsQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var questions []LeetCodeQuestions
+	for rows.Next() {
+		var q LeetCodeQuestions
+		if err := rows.Scan(&q.ID, &q.Name, &q.Pattern, &q.Difficulty, &q.LastCompletedTime, &q.NextDueTime, &q.Notes); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		questions = append(questions, q)
+	}
+
+	if err = rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"questions": questions})
 }
 
+// @Summary     Create question
+// @Description Create a new question
+// @Tags        questions
+// @Accept      json
+// @Produce     json
+// @Param       question body LeetCodeQuestions true "Question object"
+// @Success     201 {object} LeetCodeQuestions "Question created"
+// @Failure     400 {object} ErrorResponse "Bad request"
+// @Router      /questions [post]
 func createQuestion(c *gin.Context) {
 	var newQuestion LeetCodeQuestions
 	if err := c.BindJSON(&newQuestion); err != nil {
@@ -123,8 +242,11 @@ func createQuestion(c *gin.Context) {
 		return
 	}
 
-	// Add Question logic here
-	fmt.Println("Created a new question!")
+	err := db.QueryRow(createQuestionQuery, newQuestion.Name, newQuestion.Pattern, newQuestion.Difficulty, newQuestion.LastCompletedTime, newQuestion.NextDueTime, newQuestion.Notes).Scan(&newQuestion.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusCreated, newQuestion)
 }

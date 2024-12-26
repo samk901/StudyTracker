@@ -1,8 +1,35 @@
 basePath: /api/v1
 definitions:
+  main.Difficulty:
+    enum:
+    - Easy
+    - Medium
+    - Hard
+    type: string
+    x-enum-varnames:
+    - Easy
+    - Medium
+    - Hard
   main.ErrorResponse:
     properties:
       error:
+        type: string
+    type: object
+  main.LeetCodeQuestions:
+    properties:
+      difficulty:
+        $ref: '#/definitions/main.Difficulty'
+      id:
+        type: string
+      lastCompletedTime:
+        type: string
+      name:
+        type: string
+      nextDueTime:
+        type: string
+      notes:
+        type: string
+      pattern:
         type: string
     type: object
   main.User:
@@ -19,6 +46,48 @@ info:
   title: LeetCode Questions API
   version: "1.0"
 paths:
+  /questions:
+    get:
+      description: Get list of questions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Questions list response
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/main.LeetCodeQuestions'
+              type: array
+            type: object
+      summary: Get questions
+      tags:
+      - questions
+    post:
+      consumes:
+      - application/json
+      description: Create a new question
+      parameters:
+      - description: Question object
+        in: body
+        name: question
+        required: true
+        schema:
+          $ref: '#/definitions/main.LeetCodeQuestions'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Question created
+          schema:
+            $ref: '#/definitions/main.LeetCodeQuestions'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Create question
+      tags:
+      - questions
   /users:
     get:
       description: Get list of users
